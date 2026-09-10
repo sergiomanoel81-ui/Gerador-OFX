@@ -91,7 +91,15 @@
   <div class="card">
     <h2>Dados da conta</h2>
     <div class="grid">
-      <div><label>Banco (código)<span class="rq">*</span></label><input id="bankid" class="req" value="237" placeholder="237"></div>
+      <div><label>Banco<span class="rq">*</span></label>
+        <select id="bankid" class="req">
+          <option value="">— Selecione o banco —</option>
+          <option value="001">Banco do Brasil (001)</option>
+          <option value="104">Caixa Econômica (104)</option>
+          <option value="237" selected>Bradesco (237)</option>
+          <option value="004">Banco do Nordeste (004)</option>
+        </select>
+      </div>
       <div><label>Agência<span class="opc-tag">(opcional)</span></label><input id="agencia" class="opc" placeholder="1234"></div>
       <div><label>Conta<span class="rq">*</span></label><input id="conta" class="req" placeholder="000123-4"></div>
       <div>
