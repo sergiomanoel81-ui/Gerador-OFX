@@ -29,7 +29,7 @@ Gerador-OFX/
 
 Página web (roda no navegador, offline após o 1º acesso):
 
-**➡️ https://sergiomanoel81-ui.github.io/Gerador-OFX/Gerador_OFX.html**
+**➡️ https://sergiomanoel81-ui.github.io/Gerador-OFX/**
 
 - Formulário com campos obrigatórios destacados em vermelho
 - Lista de bancos (Banco do Brasil, Caixa, Bradesco, Banco do Nordeste) com código embutido

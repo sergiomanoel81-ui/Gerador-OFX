@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gerador de OFX</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#ffffff; --ink:#1c2430; --muted:#6b7684;
+    --line:#e2e6ec; --accent:#cc092f; --accent-dk:#a20724;
+    --credit:#0a7d3c; --debit:#c0392b; --field:#fbfcfd;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+  .wrap{max-width:920px;margin:0 auto;padding:24px 18px 60px;}
+  header.top{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
+  .logo{width:42px;height:42px;border-radius:10px;background:var(--accent);
+    display:grid;place-items:center;color:#fff;font-weight:800;font-size:18px;
+    box-shadow:var(--shadow);}
+  header.top h1{font-size:20px;margin:0;font-weight:700;}
+  header.top p{margin:2px 0 0;color:var(--muted);font-size:13px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:18px 18px 20px;margin-bottom:18px;box-shadow:var(--shadow);}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);margin:0 0 14px;font-weight:700;}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;}
+  input,select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;
+    background:var(--field);font-size:14px;color:var(--ink);font-family:inherit;}
+  input.req,select.req{border:1.5px solid var(--accent);box-shadow:0 0 0 2px rgba(204,9,47,.10);}
+  input.opc,select.opc{border:1.5px solid #b8c0cc;background:#f7f8fa;}
+  input:focus,select:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(204,9,47,.18);}
+  .rq{color:var(--accent);font-weight:800;margin-left:3px}
+  .opc-tag{color:#8a94a6;font-weight:600;font-size:11px;margin-left:4px;text-transform:none;letter-spacing:0}
+  table{width:100%;border-collapse:collapse;}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+    text-align:left;padding:6px 8px;font-weight:700;}
+  td{padding:5px 6px;vertical-align:middle;}
+  td input,td select{padding:8px 8px;}
+  .col-data{width:140px}.col-tipo{width:120px}.col-valor{width:140px}
+  .col-doc{width:110px}.col-x{width:38px}
+  .rm{width:30px;height:30px;border:1px solid var(--line);background:#fff;border-radius:8px;
+    color:var(--debit);cursor:pointer;font-size:16px;line-height:1;}
+  .rm:hover{background:#fff4f3;border-color:var(--debit);}
+  .valor-in{text-align:right;font-variant-numeric:tabular-nums;}
+  .btn{border:none;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:600;
+    cursor:pointer;font-family:inherit;}
+  .btn-add{background:#eef1f5;color:var(--ink);}
+  .btn-add:hover{background:#e3e8ef;}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:var(--shadow);}
+  .btn-primary:hover{background:var(--accent-dk);}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px;}
+  .spacer{flex:1}
+  .totbar{display:flex;gap:18px;flex-wrap:wrap;padding:14px 16px;background:#f8fafc;
+    border:1px solid var(--line);border-radius:12px;margin:14px 0 4px;}
+  .tot{font-size:12px;color:var(--muted);}
+  .tot b{display:block;font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;margin-top:2px;}
+  .tot.c b{color:var(--credit)} .tot.d b{color:var(--debit)}
+  pre{background:#0f1621;color:#d6e2f0;border-radius:12px;padding:16px;overflow:auto;
+    font:12px/1.5 ui-monospace,Consolas,monospace;max-height:340px;white-space:pre;}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px;}
+  .err{color:var(--debit);font-size:13px;font-weight:600;margin-top:10px;min-height:18px;}
+  .ok{color:var(--credit);}
+  @media(max-width:640px){.col-data,.col-tipo,.col-valor,.col-doc{width:auto}}
+  .legend{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .chip{font-size:12px;font-weight:600;padding:3px 11px;border-radius:20px;display:inline-flex;align-items:center;gap:6px}
+  .chip::before{content:"";width:10px;height:10px;border-radius:3px}
+  .chip.oblig{background:#fdeaee;color:var(--accent-dk)} .chip.oblig::before{background:var(--accent)}
+  .chip.opc{background:#eef1f5;color:#5a6472} .chip.opc::before{background:#8a94a6}
+  .cols-demo{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+  .hcell{font-size:12px;font-weight:700;color:#fff;padding:8px 15px;border-radius:8px}
+  .hcell.oblig{background:var(--accent)} .hcell.opc{background:#8a94a6}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="logo">OFX</div>
+    <div>
+      <h1>Gerador de OFX</h1>
+      <p>Cria arquivo OFX para importar no Tasy — contas sem exportação (ex.: aplicação Bradesco)</p>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>Dados da conta</h2>
+    <div class="grid">
+      <div><label>Banco<span class="rq">*</span></label>
+        <select id="bankid" class="req">
+          <option value="">— Selecione o banco —</option>
+          <option value="001">Banco do Brasil (001)</option>
+          <option value="104">Caixa Econômica (104)</option>
+          <option value="237" selected>Bradesco (237)</option>
+          <option value="004">Banco do Nordeste (004)</option>
+        </select>
+      </div>
+      <div><label>Agência<span class="opc-tag">(opcional)</span></label><input id="agencia" class="opc" placeholder="1234"></div>
+      <div><label>Conta<span class="rq">*</span></label><input id="conta" class="req" placeholder="000123-4"></div>
+      <div>
+        <label>Tipo de conta<span class="rq">*</span></label>
+        <select id="acctype" class="req">
+          <option value="CHECKING">Corrente (CHECKING)</option>
+          <option value="SAVINGS">Poupança (SAVINGS)</option>
+          <option value="MONEYMRKT" selected>Aplicação (MONEYMRKT)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Período e saldo</h2>
+    <div class="grid">
+      <div><label>Data inicial do período<span class="rq">*</span></label><input type="date" id="dtini" class="req"></div>
+      <div><label>Data final do período<span class="rq">*</span></label><input type="date" id="dtfim" class="req"></div>
+      <div><label>Saldo final na data (R$)<span class="rq">*</span></label><input id="saldofinal" class="req valor-in" placeholder="0,00"></div>
+      <div><label>Saldo inicial (calculado)</label><input id="saldoini" class="valor-in" readonly tabindex="-1"></div>
+    </div>
+    <p class="hint">Informe o <b>saldo final</b> mostrado pelo banco na data final. O saldo inicial é calculado
+      automaticamente (final − créditos + débitos) — é exatamente o que o Tasy vai gravar.</p>
+  </div>
+
+  <div class="card">
+    <h2>Importar de Excel</h2>
+    <p class="hint" style="margin-top:0">Monte uma planilha simples com as colunas abaixo (aceita <b>.xls</b> e <b>.xlsx</b>).
+      Baixe o modelo pronto para não errar os títulos. Os lançamentos importados entram na tabela abaixo.</p>
+    <div class="legend">
+      <span class="chip oblig">Obrigatório</span>
+      <span class="chip opc">Opcional</span>
+    </div>
+    <div class="cols-demo">
+      <span class="hcell oblig">Data</span>
+      <span class="hcell oblig">Histórico</span>
+      <span class="hcell opc">Documento</span>
+      <span class="hcell oblig">Tipo (C/D)</span>
+      <span class="hcell oblig">Valor</span>
+    </div>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="baixarModelo()">⬇ Baixar modelo Excel</button>
+      <button class="btn btn-add" onclick="document.getElementById('xlsfile').click()">📄 Importar Excel</button>
+      <input type="file" id="xlsfile" accept=".xls,.xlsx" hidden>
+    </div>
+    <div class="err" id="msgExcel"></div>
+  </div>
+
+  <div class="card">
+    <h2>Lançamentos</h2>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-data">Data<span class="rq">*</span></th>
+            <th>Histórico<span class="rq">*</span></th>
+            <th class="col-doc">Documento<span class="opc-tag">(opc)</span></th>
+            <th class="col-tipo">Tipo<span class="rq">*</span></th>
+            <th class="col-valor">Valor (R$)<span class="rq">*</span></th>
+            <th class="col-x"></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="actions"><button class="btn btn-add" onclick="addRow()">+ Adicionar lançamento</button></div>
+
+    <div class="totbar">
+      <div class="tot">Lançamentos<b id="tqtd">0</b></div>
+      <div class="tot c">Total créditos<b id="tcred">R$ 0,00</b></div>
+      <div class="tot d">Total débitos<b id="tdeb">R$ 0,00</b></div>
+      <div class="tot">Variação<b id="tvar">R$ 0,00</b></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="baixar()">⬇ Gerar e baixar OFX</button>
+    <button class="btn btn-ghost" onclick="previa()">Ver prévia</button>
+    <span class="spacer"></span>
+  </div>
+  <div class="err" id="msg"></div>
+
+  <pre id="preview" hidden></pre>
+</div>
+
+<script>
+"use strict";
+
+// ---------- utils ----------
+function parseValor(s){
+  if(s==null) return NaN;
+  let v = String(s).trim().replace(/r\$/i,'').replace(/\s/g,'');
+  if(!v) return NaN;
+  const neg = v.indexOf('-')>-1;
+  v = v.replace(/[+-]/g,'');
+  const dot = v.lastIndexOf('.'), com = v.lastIndexOf(',');
+  if(dot>-1 && com>-1){
+    if(com>dot){ v = v.replace(/\./g,'').replace(',', '.'); }   // BR 1.234,56
+    else       { v = v.replace(/,/g,''); }                       // US 1,234.56
+  } else if(com>-1){ v = v.replace(',', '.'); }                  // 1234,56
+  const n = Number(v);
+  if(isNaN(n)) return NaN;
+  return neg ? -n : n;
+}
+function fmtBR(n){
+  return 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function soAscii(s){
+  return String(s||'')
+    .normalize('NFD').replace(/[̀-ͯ]/g,'') // tira acentos
+    .replace(/[^\x20-\x7E]/g,'')                      // só ASCII imprimível
+    .replace(/[<>&]/g,' ')                            // caracteres que quebram tag
+    .trim();
+}
+function ymd(dateStr){ return dateStr ? dateStr.replace(/-/g,'') : ''; }      // 2026-07-01 -> 20260701
+function ofxDate(dateStr){ return ymd(dateStr) + '000000[-3:BRT]'; }
+function pad(n,l){ return String(n).padStart(l,'0'); }
+
+// ---------- linhas ----------
+function addRow(data){
+  const tb = document.getElementById('rows');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td class="col-data"><input type="date" class="f-data req"></td>
+    <td><input class="f-hist req" placeholder="Ex.: RENDIMENTO APLICACAO"></td>
+    <td class="col-doc"><input class="f-doc opc" placeholder="opcional"></td>
+    <td class="col-tipo"><select class="f-tipo req">
+        <option value="C">Crédito</option><option value="D">Débito</option></select></td>
+    <td class="col-valor"><input class="f-valor req valor-in" placeholder="0,00"></td>
+    <td class="col-x"><button class="rm" title="Remover" onclick="this.closest('tr').remove();recalc()">×</button></td>`;
+  tb.appendChild(tr);
+  if(data){
+    tr.querySelector('.f-data').value = data.data||'';
+    tr.querySelector('.f-hist').value = data.hist||'';
+    tr.querySelector('.f-doc').value  = data.doc||'';
+    tr.querySelector('.f-tipo').value = data.tipo||'C';
+    tr.querySelector('.f-valor').value = data.valor||'';
+  }
+  tr.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',recalc));
+  recalc();
+}
+
+function coletaLancamentos(){
+  const out=[];
+  document.querySelectorAll('#rows tr').forEach(tr=>{
+    const data = tr.querySelector('.f-data').value;
+    const hist = tr.querySelector('.f-hist').value;
+    const doc  = tr.querySelector('.f-doc').value;
+    const tipo = tr.querySelector('.f-tipo').value;
+    const valor= parseValor(tr.querySelector('.f-valor').value);
+    if(!data && !hist && isNaN(valor)) return; // linha vazia
+    out.push({data,hist,doc,tipo,valor});
+  });
+  return out;
+}
+
+function recalc(){
+  const l = coletaLancamentos();
+  let cred=0, deb=0;
+  l.forEach(x=>{ if(!isNaN(x.valor)){ if(x.tipo==='C') cred+=Math.abs(x.valor); else deb+=Math.abs(x.valor); }});
+  document.getElementById('tqtd').textContent = l.length;
+  document.getElementById('tcred').textContent = fmtBR(cred);
+  document.getElementById('tdeb').textContent  = fmtBR(deb);
+  document.getElementById('tvar').textContent  = fmtBR(cred-deb);
+  const sf = parseValor(document.getElementById('saldofinal').value);
+  document.getElementById('saldoini').value = isNaN(sf) ? '' : (sf - cred + deb).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+document.getElementById('saldofinal').addEventListener('input',recalc);
+
+// ---------- validação + geração ----------
+function valida(){
+  const errs=[];
+  if(!document.getElementById('bankid').value.trim()) errs.push('Informe o código do banco.');
+  if(!document.getElementById('conta').value.trim())  errs.push('Informe a conta.');
+  if(!document.getElementById('dtini').value) errs.push('Informe a data inicial do período.');
+  if(!document.getElementById('dtfim').value) errs.push('Informe a data final do período.');
+  if(isNaN(parseValor(document.getElementById('saldofinal').value))) errs.push('Informe o saldo final.');
+  const l = coletaLancamentos();
+  if(l.length===0) errs.push('Adicione ao menos um lançamento.');
+  l.forEach((x,i)=>{
+    if(!x.data) errs.push(`Lançamento ${i+1}: data em branco.`);
+    if(!x.hist || !x.hist.trim()) errs.push(`Lançamento ${i+1}: histórico em branco.`);
+    if(isNaN(x.valor)||x.valor===0) errs.push(`Lançamento ${i+1}: valor inválido.`);
+  });
+  return errs;
+}
+
+function fitid(l, dtserver){
+  // deterministico por conteudo: mesmo lançamento gera o mesmo FITID
+  const base = ymd(l.data) + (l.tipo==='C'?'1':'2') + pad(Math.round(Math.abs(l.valor)*100),8);
+  return base;
+}
+
+function gerarOFX(){
+  const bankid = soAscii(document.getElementById('bankid').value);
+  const acctid = soAscii(document.getElementById('agencia').value.replace(/\D/g,'') + '-' + document.getElementById('conta').value).replace(/^-|-$/g,'');
+  const acctype= document.getElementById('acctype').value;
+  const dtini  = document.getElementById('dtini').value;
+  const dtfim  = document.getElementById('dtfim').value;
+  const saldoF = parseValor(document.getElementById('saldofinal').value);
+  const l = coletaLancamentos();
+  const now = new Date();
+  const dtserver = `${now.getFullYear()}${pad(now.getMonth()+1,2)}${pad(now.getDate(),2)}${pad(now.getHours(),2)}${pad(now.getMinutes(),2)}${pad(now.getSeconds(),2)}`;
+
+  const usados = {};
+  const L=[];
+  L.push('OFXHEADER:100','DATA:OFXSGML','VERSION:102','SECURITY:NONE',
+          'ENCODING:USASCII','CHARSET:1252','COMPRESSION:NONE','OLDFILEUID:NONE','NEWFILEUID:NONE','');
+  L.push('<OFX>');
+  L.push(' <SIGNONMSGSRSV1>','  <SONRS>','   <STATUS>','    <CODE>0</CODE>','    <SEVERITY>INFO</SEVERITY>','   </STATUS>');
+  L.push(`   <DTSERVER>${dtserver}[-3:BRT]</DTSERVER>`,'   <LANGUAGE>POR</LANGUAGE>','  </SONRS>',' </SIGNONMSGSRSV1>');
+  L.push(' <BANKMSGSRSV1>','  <STMTTRNRS>','   <TRNUID>1001</TRNUID>',
+          '   <STATUS>','    <CODE>0</CODE>','    <SEVERITY>INFO</SEVERITY>','   </STATUS>');
+  L.push('   <STMTRS>','    <CURDEF>BRL</CURDEF>','    <BANKACCTFROM>',
+          `     <BANKID>${bankid}</BANKID>`,`     <ACCTID>${acctid}</ACCTID>`,
+          `     <ACCTTYPE>${acctype}</ACCTTYPE>`,'    </BANKACCTFROM>');
+  L.push('    <BANKTRANLIST>',`     <DTSTART>${ofxDate(dtini)}</DTSTART>`,`     <DTEND>${ofxDate(dtfim)}</DTEND>`);
+
+  l.forEach(x=>{
+    const trntype = x.tipo==='C' ? 'CREDIT' : 'DEBIT';
+    const sinal   = x.tipo==='C' ? '' : '-';
+    const valor   = sinal + Math.abs(x.valor).toFixed(2);   // ponto decimal, padrão OFX
+    let fid = fitid(x);
+    while(usados[fid]) fid = fid + 'B';                       // evita colisão exata
+    usados[fid]=1;
+    const memo = soAscii(x.hist) || 'LANCAMENTO';
+    L.push('     <STMTTRN>');
+    L.push(`      <TRNTYPE>${trntype}</TRNTYPE>`);
+    L.push(`      <DTPOSTED>${ofxDate(x.data)}</DTPOSTED>`);
+    L.push(`      <TRNAMT>${valor}</TRNAMT>`);
+    L.push(`      <FITID>${fid}</FITID>`);
+    if(soAscii(x.doc)) L.push(`      <CHECKNUM>${soAscii(x.doc)}</CHECKNUM>`);
+    L.push(`      <MEMO>${memo}</MEMO>`);
+    L.push('     </STMTTRN>');
+  });
+
+  L.push('    </BANKTRANLIST>');
+  L.push('    <LEDGERBAL>',`     <BALAMT>${saldoF.toFixed(2)}</BALAMT>`,
+          `     <DTASOF>${ofxDate(dtfim)}</DTASOF>`,'    </LEDGERBAL>');
+  L.push('   </STMTRS>','  </STMTTRNRS>',' </BANKMSGSRSV1>','</OFX>');
+  return L.join('\r\n');
+}
+
+function nomeArquivo(){
+  const dtfim = document.getElementById('dtfim').value;
+  const c = document.getElementById('conta').value.replace(/\D/g,'') || 'conta';
+  const mm = dtfim ? dtfim.slice(5,7) : '00';
+  const yy = dtfim ? dtfim.slice(0,4) : '0000';
+  return `OFX_Aplicacao_${c}_${mm}_${yy}.ofx`;
+}
+
+function previa(){
+  const errs = valida();
+  const msg = document.getElementById('msg');
+  if(errs.length){ msg.className='err'; msg.textContent = errs[0]; return; }
+  msg.textContent='';
+  const pre = document.getElementById('preview');
+  pre.hidden=false; pre.textContent = gerarOFX();
+}
+
+function baixar(){
+  const errs = valida();
+  const msg = document.getElementById('msg');
+  if(errs.length){ msg.className='err'; msg.textContent = errs[0]; return; }
+  const ofx = gerarOFX();
+  const blob = new Blob([ofx], {type:'application/x-ofx'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=nomeArquivo(); document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+  msg.className='err ok'; msg.textContent = '✓ Arquivo '+nomeArquivo()+' gerado. Agora importe no Tasy.';
+  const pre = document.getElementById('preview'); pre.hidden=false; pre.textContent = ofx;
+}
+
+// ---------- Excel: importar / modelo ----------
+function norm(s){ return String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase(); }
+function msgExcel(t, ok){ const m=document.getElementById('msgExcel'); m.className='err'+(ok?' ok':''); m.textContent=t; }
+
+function toISO(v){
+  if(v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${pad(v.getMonth()+1,2)}-${pad(v.getDate(),2)}`;
+  let s=String(v==null?'':v).trim();
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if(m) return `${m[1]}-${pad(m[2],2)}-${pad(m[3],2)}`;
+  m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  if(m){ const y=m[3].length===2?'20'+m[3]:m[3]; return `${y}-${pad(m[2],2)}-${pad(m[1],2)}`; }
+  return '';
+}
+function tipoFrom(v, valorNum){
+  const t=norm(v);
+  if(t.startsWith('c')) return 'C';
+  if(t.startsWith('d')) return 'D';
+  if(t==='1'||t==='+') return 'C';
+  if(t==='0'||t==='-') return 'D';
+  return (valorNum!=null && valorNum<0) ? 'D' : 'C'; // infere pelo sinal
+}
+
+function baixarModelo(){
+  if(!window.XLSX){ msgExcel('A biblioteca de Excel não carregou. Conecte-se à internet e recarregue a página (F5).'); return; }
+  const headers=['Data','Histórico','Documento','Tipo (C/D)','Valor'];
+  const oblig=[true,true,false,true,true];
+  const borda={top:{style:'thin',color:{rgb:'D0D5DD'}},bottom:{style:'thin',color:{rgb:'D0D5DD'}},
+               left:{style:'thin',color:{rgb:'D0D5DD'}},right:{style:'thin',color:{rgb:'D0D5DD'}}};
+  const ws={};
+  headers.forEach((h,i)=>{
+    ws[XLSX.utils.encode_cell({r:0,c:i})]={v:h,t:'s',s:{
+      fill:{patternType:'solid',fgColor:{rgb: oblig[i]?'CC092F':'8A94A6'}},
+      font:{bold:true,color:{rgb:'FFFFFF'},sz:11},
+      alignment:{horizontal:'center',vertical:'center'}, border:borda}};
+  });
+  const exemplos=[
+    ['2026-07-15','RENDIMENTO APLICACAO','','C',250.00],
+    ['2026-07-20','APLICACAO','DOC123','D',1000.00]
+  ];
+  exemplos.forEach((row,ri)=>row.forEach((val,ci)=>{
+    ws[XLSX.utils.encode_cell({r:ri+1,c:ci})]={v:val,t:(typeof val==='number'?'n':'s'),s:{border:borda}};
+  }));
+  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:exemplos.length,c:headers.length-1}});
+  ws['!cols']=[{wch:12},{wch:34},{wch:14},{wch:10},{wch:14}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Lancamentos');
+  XLSX.writeFile(wb,'Modelo_Importacao_OFX.xlsx');
+  msgExcel('✓ Modelo baixado. Preencha e importe de volta.', true);
+}
+
+function importarExcel(file){
+  if(!window.XLSX){ msgExcel('A biblioteca de Excel não carregou. Conecte-se à internet e recarregue a página (F5).'); return; }
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+      let hr=-1; const col={};
+      for(let i=0;i<rows.length;i++){
+        const cells=rows[i].map(norm);
+        if(cells.includes('data')){
+          hr=i;
+          rows[i].forEach((c,ci)=>{
+            const n=norm(c);
+            if(n==='data') col.data=ci;
+            else if(['historico','descricao','hist','historico do lancamento'].includes(n)) col.hist=ci;
+            else if(['documento','doc','nr documento','numero documento','n documento','nro documento'].includes(n)) col.doc=ci;
+            else if(['tipo','tipo (c/d)','credito','credito/debito','debito/credito','c/d','d/c','natureza'].includes(n)) col.tipo=ci;
+            else if(['valor','vlr','valor r$','valor (r$)','valor rs'].includes(n)) col.valor=ci;
+          });
+          break;
+        }
+      }
+      if(hr<0){ msgExcel('Não encontrei o cabeçalho "Data". Baixe o modelo e use os mesmos títulos.'); return; }
+      if(col.data==null||col.hist==null||col.valor==null){
+        msgExcel('Faltam colunas obrigatórias (Data, Histórico e Valor). Use o modelo.'); return; }
+
+      const recs=[];
+      for(let i=hr+1;i<rows.length;i++){
+        const r=rows[i]||[];
+        const rawData=r[col.data], rawHist=r[col.hist], rawVal=r[col.valor];
+        if((rawData===''||rawData==null) && (rawHist===''||rawHist==null) && (rawVal===''||rawVal==null)) continue;
+        const vnum=parseValor(rawVal);
+        if(isNaN(vnum)) continue;
+        const tipo=tipoFrom(col.tipo!=null?r[col.tipo]:'', vnum);
+        recs.push({
+          data: toISO(rawData),
+          hist: String(rawHist==null?'':rawHist).trim(),
+          doc:  col.doc!=null ? String(r[col.doc]==null?'':r[col.doc]).trim() : '',
+          tipo: tipo,
+          valor: Math.abs(vnum).toFixed(2).replace('.',',')
+        });
+      }
+      if(recs.length===0){ msgExcel('Nenhum lançamento válido encontrado na planilha.'); return; }
+
+      // remove linhas em branco antes de inserir
+      document.querySelectorAll('#rows tr').forEach(tr=>{
+        const d=tr.querySelector('.f-data').value, h=tr.querySelector('.f-hist').value, v=tr.querySelector('.f-valor').value;
+        if(!d && !h && !v) tr.remove();
+      });
+      recs.forEach(addRow);
+      recalc();
+      msgExcel(`✓ ${recs.length} lançamento(s) importado(s). Confira a tabela abaixo.`, true);
+    }catch(err){ msgExcel('Erro ao ler o arquivo: '+err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+document.getElementById('xlsfile').addEventListener('change', e=>{
+  if(e.target.files[0]) importarExcel(e.target.files[0]);
+  e.target.value='';
+});
+if(!window.XLSX){ msgExcel('Sem internet: os botões de Excel só funcionam online (a biblioteca é baixada na 1ª vez). A digitação manual funciona normal.'); }
+
+// início
+addRow();
+recalc();
+</script>
+</body>
+</html>
