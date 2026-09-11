@@ -77,6 +77,7 @@
   .hcell.oblig{background:var(--accent)} .hcell.opc{background:#8a94a6}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -146,6 +147,18 @@
       <input type="file" id="xlsfile" accept=".xls,.xlsx" hidden>
     </div>
     <div class="err" id="msgExcel"></div>
+  </div>
+
+  <div class="card">
+    <h2>Importar de PDF (extrato do banco)</h2>
+    <p class="hint" style="margin-top:0">Leia o PDF do extrato e a ferramenta preenche conta, período, saldo e os lançamentos.
+      Reconhece: <b>BB Fundos/Aplicação</b>, <b>BB Rende Fácil</b> e <b>Bradesco Unificado (conta-corrente)</b>.
+      <b>Sempre confira os lançamentos</b> (principalmente o tipo C/D) antes de gerar.</p>
+    <div class="actions">
+      <button class="btn btn-add" onclick="document.getElementById('pdffile').click()">📕 Importar PDF</button>
+      <input type="file" id="pdffile" accept=".pdf,application/pdf" hidden>
+    </div>
+    <div class="err" id="msgPdf"></div>
   </div>
 
   <div class="card">
@@ -287,10 +300,12 @@ function valida(){
   return errs;
 }
 
-function fitid(l, dtserver){
-  // deterministico por conteudo: mesmo lançamento gera o mesmo FITID
+function fitid(l){
+  // deterministico por conteudo: mesmo lançamento gera o mesmo FITID.
+  // Inclui o documento quando houver (evita colisão de mesmo dia/valor).
   const base = ymd(l.data) + (l.tipo==='C'?'1':'2') + pad(Math.round(Math.abs(l.valor)*100),8);
-  return base;
+  const d = String(l.doc||'').replace(/[^0-9A-Za-z]/g,'');
+  return d ? base + '-' + d : base;
 }
 
 function gerarOFX(){
@@ -487,6 +502,147 @@ document.getElementById('xlsfile').addEventListener('change', e=>{
   e.target.value='';
 });
 if(!window.XLSX){ msgExcel('Sem internet: os botões de Excel só funcionam online (a biblioteca é baixada na 1ª vez). A digitação manual funciona normal.'); }
+
+// ---------- PDF: importar extrato ----------
+function msgPdf(t, ok){ const m=document.getElementById('msgPdf'); m.className='err'+(ok?' ok':''); m.textContent=t; }
+function isoFromBR(d){ const m=String(d).match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:''; }
+function moniesBR(s){ return (String(s).match(/-?\d{1,3}(?:\.\d{3})*,\d{2}/g)||[]); }
+function semSinal(s){ return String(s).replace(/^-/,''); }
+
+function detectarTipoExtrato(text){
+  if(/BB\s+RENDE\s+F[ÁA]CIL/i.test(text)) return 'bb_rende';
+  if(/Investimentos\s+Fundos|Valor\s+cota|Saldo\s+cotas|Ref\s+DI\s+Plus/i.test(text)) return 'bb_fundos';
+  if(/Extrato\s+Unificado|Invest\s+F[áa]cil\s+Bradesco|Demonstrativo\s+da\s+Movimenta/i.test(text)) return 'bradesco_cc';
+  return null;
+}
+function parseFundos(lines){
+  const H={banco:'001',acctype:'MONEYMRKT',agencia:'',conta:'',dtini:'',dtfim:'',saldofinal:''};
+  const recs=[]; const t=lines.join('\n'); let m;
+  if((m=t.match(/Ag[êe]ncia\s+([\d.\-]+)/i))) H.agencia=m[1];
+  if((m=t.match(/Conta\s+([\d.\-]+)/i)))     H.conta=m[1];
+  if((m=t.match(/(\d{2}\/\d{2}\/\d{4})\s+Saldo\s+anterior/i))) H.dtini=isoFromBR(m[1]);
+  if((m=t.match(/(\d{2}\/\d{2}\/\d{4})\s+Saldo\s+Atual/i)))    H.dtfim=isoFromBR(m[1]);
+  if((m=t.match(/Saldo\s+Atual\s*=\s*(-?\d{1,3}(?:\.\d{3})*,\d{2})/i))) H.saldofinal=m[1];
+  const grab=(re)=>{ const x=t.match(re); return x?parseFloat(x[1].replace(/\./g,'').replace(',','.')):0; };
+  const apl=grab(/Aplica[çc][õo]es\s*\(\+\)\s*(-?\d[\d.,]*)/i);
+  const res=grab(/Resgates\s*\(\-\)\s*(-?\d[\d.,]*)/i);
+  const ren=grab(/Rendimento\s+L[íi]quido\s*(-?\d[\d.,]*)/i);
+  const dm=H.dtfim||H.dtini;
+  if(apl>0) recs.push({data:dm,hist:'APLICACAO',doc:'',tipo:'C',valor:apl.toFixed(2).replace('.',',')});
+  if(res>0) recs.push({data:dm,hist:'RESGATE',doc:'',tipo:'D',valor:res.toFixed(2).replace('.',',')});
+  if(ren!==0) recs.push({data:dm,hist:'RENDIMENTO APLICACAO',doc:'',tipo:ren>0?'C':'D',valor:Math.abs(ren).toFixed(2).replace('.',',')});
+  return {header:H,recs};
+}
+function parseRende(lines){
+  const H={banco:'001',acctype:'MONEYMRKT',agencia:'',conta:'',dtini:'',dtfim:'',saldofinal:''};
+  const recs=[]; const t=lines.join('\n'); let m;
+  if((m=t.match(/(\d{4}-\d)\s+(\d+-\d)/))){ H.agencia=m[1]; H.conta=m[2]; }
+  const sal=[...t.matchAll(/Saldo\s+bruto\s+em\s+(\d{2}\/\d{2}\/\d{4})\s*:?\s*R\$\s*(-?\d{1,3}(?:\.\d{3})*,\d{2})/gi)];
+  if(sal.length){ H.dtini=isoFromBR(sal[0][1]); H.dtfim=isoFromBR(sal[sal.length-1][1]); H.saldofinal=sal[sal.length-1][2]; }
+  for(const ln of lines){
+    const mm=ln.match(/^(\d{2}\/\d{2}\/\d{4})\s+(Aplica\S+|Resgate)\s+(.+)$/i);
+    if(!mm) continue;
+    const monies=moniesBR(mm[3]); if(!monies.length) continue;
+    const isApl=/aplica/i.test(mm[2]);
+    recs.push({data:isoFromBR(mm[1]),hist:isApl?'APLICACAO':'RESGATE',doc:'',tipo:isApl?'C':'D',valor:semSinal(monies[monies.length-1])});
+  }
+  return {header:H,recs};
+}
+function tipoBradesco(hist){
+  const h=hist.toLowerCase();
+  if(/^ted|aplic|pagamento\s|tarifa|saque|d[ée]bito/.test(h)) return 'D';
+  if(/resgate|rentab|pix\s+recebido|recebido|pgto|reembolso|cr[ée]dito|estorno/.test(h)) return 'C';
+  return 'C';
+}
+function parseBradesco(lines){
+  const H={banco:'237',acctype:'CHECKING',agencia:'',conta:'',dtini:'',dtfim:'',saldofinal:'1,00'};
+  const recs=[]; const t=lines.join('\n'); let m;
+  if((m=t.match(/Ag[êe]ncia:?\s*(\d+)\s*-\s*(\d)/i))) H.agencia=`${m[1]}-${m[2]}`;
+  if((m=t.match(/Conta:?\s*(\d+)\s*-\s*(\d)/i)))       H.conta=`${m[1]}-${m[2]}`;
+  if((m=t.match(/(\d{2}\/\d{2}\/\d{4})\s*a\s*(\d{2}\/\d{2}\/\d{4})/i))){ H.dtini=isoFromBR(m[1]); H.dtfim=isoFromBR(m[2]); }
+  const ano=(H.dtfim||'2026').slice(0,4);
+  if((m=t.match(/Conta\s+F[áa]cil.*?(-?\d{1,3}(?:\.\d{3})*,\d{2})\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})/i))) H.saldofinal=m[2];
+  let dentro=false, dataAtual='';
+  for(const ln of lines){
+    if(/Demonstrativo\s+da\s+Movimenta/i.test(ln)){ dentro=true; continue; }
+    if(!dentro) continue;
+    if(/^\s*Total\b/i.test(ln)) break;
+    if(/Saldo\s+Anterior/i.test(ln)){ const d=ln.match(/^(\d{2}\/\d{2})/); if(d) dataAtual=d[1]; continue; }
+    let rest=ln.trim();
+    const dm=rest.match(/^(\d{2}\/\d{2})\s+(.*)$/);
+    if(dm){ dataAtual=dm[1]; rest=dm[2]; }
+    const monies=moniesBR(rest); if(!monies.length) continue;
+    const valor=monies[monies.length-1];
+    let doc=''; const dc=rest.match(/\b(\d{5,})\b/); if(dc) doc=dc[1];
+    let hist=rest.replace(/\b\d{5,}\b/g,'').replace(/-?\d{1,3}(?:\.\d{3})*,\d{2}/g,'').replace(/\*/g,'').replace(/\s+/g,' ').trim();
+    if(!hist) continue;
+    const data=dataAtual?isoFromBR(`${dataAtual}/${ano}`):(H.dtini||'');
+    recs.push({data,hist:hist.toUpperCase(),doc,tipo:tipoBradesco(hist),valor:semSinal(valor)});
+  }
+  return {header:H,recs};
+}
+function parseExtrato(lines){
+  const tipo=detectarTipoExtrato(lines.join('\n'));
+  if(tipo==='bb_fundos')  return {tipo,...parseFundos(lines)};
+  if(tipo==='bb_rende')   return {tipo,...parseRende(lines)};
+  if(tipo==='bradesco_cc')return {tipo,...parseBradesco(lines)};
+  return {tipo:null,header:{},recs:[]};
+}
+
+async function lerPDF(file){
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const lines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    const rows={};
+    tc.items.forEach(it=>{
+      if(!it.str || !it.str.trim()) return;
+      const y=Math.round(it.transform[5]);
+      (rows[y]=rows[y]||[]).push({x:it.transform[4], s:it.str});
+    });
+    Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
+      const line=rows[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join(' ').replace(/\s+/g,' ').trim();
+      if(line) lines.push(line);
+    });
+  }
+  return lines;
+}
+
+const NOMES_TIPO={bb_fundos:'BB Fundos/Aplicação', bb_rende:'BB Rende Fácil', bradesco_cc:'Bradesco Unificado (CC)'};
+async function importarPDF(file){
+  if(!window.pdfjsLib){ msgPdf('A biblioteca de PDF não carregou. Conecte-se à internet e recarregue a página (F5).'); return; }
+  msgPdf('Lendo o PDF…');
+  try{
+    const lines=await lerPDF(file);
+    const r=parseExtrato(lines);
+    if(!r.tipo){ msgPdf('Não reconheci o formato deste PDF. Tipos suportados: BB Fundos, BB Rende Fácil e Bradesco Unificado (CC).'); return; }
+    const H=r.header;
+    if(H.banco){ const sel=document.getElementById('bankid'); if([...sel.options].some(o=>o.value===H.banco)) sel.value=H.banco; }
+    if(H.agencia) document.getElementById('agencia').value=H.agencia;
+    if(H.conta)   document.getElementById('conta').value=H.conta;
+    if(H.acctype) document.getElementById('acctype').value=H.acctype;
+    if(H.dtini)   document.getElementById('dtini').value=H.dtini;
+    if(H.dtfim)   document.getElementById('dtfim').value=H.dtfim;
+    if(H.saldofinal) document.getElementById('saldofinal').value=H.saldofinal;
+    // remove linhas em branco e insere
+    document.querySelectorAll('#rows tr').forEach(tr=>{
+      const d=tr.querySelector('.f-data').value, h=tr.querySelector('.f-hist').value, v=tr.querySelector('.f-valor').value;
+      if(!d && !h && !v) tr.remove();
+    });
+    r.recs.forEach(addRow);
+    recalc();
+    if(r.recs.length===0){ msgPdf(`Detectei "${NOMES_TIPO[r.tipo]}" mas não encontrei lançamentos. Confira o PDF.`); return; }
+    msgPdf(`✓ ${NOMES_TIPO[r.tipo]}: ${r.recs.length} lançamento(s) importado(s). CONFIRA o tipo (C/D) e o saldo antes de gerar.`, true);
+  }catch(err){ msgPdf('Erro ao ler o PDF: '+err.message); }
+}
+document.getElementById('pdffile').addEventListener('change', e=>{
+  if(e.target.files[0]) importarPDF(e.target.files[0]);
+  e.target.value='';
+});
+if(window.pdfjsLib){ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }
+else{ msgPdf('Sem internet: o import de PDF só funciona online (biblioteca baixada na 1ª vez). O resto funciona normal.'); }
 
 // início
 addRow();
