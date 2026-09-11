@@ -154,6 +154,13 @@
     <p class="hint" style="margin-top:0">Leia o PDF do extrato e a ferramenta preenche conta, período, saldo e os lançamentos.
       Reconhece: <b>BB Fundos/Aplicação</b>, <b>BB Rende Fácil</b> e <b>Bradesco Unificado (conta-corrente)</b>.
       <b>Sempre confira os lançamentos</b> (principalmente o tipo C/D) antes de gerar.</p>
+    <p class="hint" style="margin-top:8px"><b>Como o tipo (C/D) é definido:</b><br>
+      • <b>Aplicação de fundo (BB Fundos / Rende Fácil):</b> convenção “conta da aplicação” —
+      <b>Aplicação e Rendimento = Crédito (C)</b>; <b>Resgate = Débito (D)</b>.<br>
+      • <b>Bradesco conta-corrente:</b> pelo histórico —
+      Resgate, Rentabilidade, Pix recebido e Pagamento = <b>Crédito</b>; TED e Aplicação = <b>Débito</b>.<br>
+      Confira a coluna <b>Tipo</b> e o <b>saldo inicial calculado</b> (deve bater com o saldo inicial do extrato).
+      Se a direção precisar ser o contrário no seu controle, é só trocar o C/D na linha antes de gerar.</p>
     <div class="actions">
       <button class="btn btn-add" onclick="document.getElementById('pdffile').click()">📕 Importar PDF</button>
       <input type="file" id="pdffile" accept=".pdf,application/pdf" hidden>
