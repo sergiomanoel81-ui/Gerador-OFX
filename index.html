@@ -119,11 +119,11 @@
     <div class="grid">
       <div><label>Data inicial do período<span class="rq">*</span></label><input type="date" id="dtini" class="req"></div>
       <div><label>Data final do período<span class="rq">*</span></label><input type="date" id="dtfim" class="req"></div>
-      <div><label>Saldo final na data (R$)<span class="rq">*</span></label><input id="saldofinal" class="req valor-in" placeholder="0,00"></div>
-      <div><label>Saldo inicial (calculado)</label><input id="saldoini" class="valor-in" readonly tabindex="-1"></div>
+      <div><label>Saldo final na data (R$)<span class="opc-tag">(final ou inicial)</span></label><input id="saldofinal" class="valor-in" placeholder="0,00"></div>
+      <div><label>Saldo inicial na data (R$)<span class="opc-tag">(final ou inicial)</span></label><input id="saldoini" class="valor-in" placeholder="0,00"></div>
     </div>
-    <p class="hint">Informe o <b>saldo final</b> mostrado pelo banco na data final. O saldo inicial é calculado
-      automaticamente (final − créditos + débitos) — é exatamente o que o Tasy vai gravar.</p>
+    <p class="hint">Informe <b>um</b> dos saldos — o outro é calculado pelos lançamentos (não pode deixar os dois em branco).
+      Normalmente você tem o <b>saldo final</b> do extrato; o Tasy usa esse saldo como âncora da conciliação.</p>
   </div>
 
   <div class="card">
@@ -207,6 +207,7 @@
 
 <script>
 "use strict";
+let saldoAncora='final';   // qual saldo o usuário informou: 'final' ou 'inicial'
 
 // ---------- utils ----------
 function parseValor(s){
@@ -284,10 +285,18 @@ function recalc(){
   document.getElementById('tcred').textContent = fmtBR(cred);
   document.getElementById('tdeb').textContent  = fmtBR(deb);
   document.getElementById('tvar').textContent  = fmtBR(cred-deb);
-  const sf = parseValor(document.getElementById('saldofinal').value);
-  document.getElementById('saldoini').value = isNaN(sf) ? '' : (sf - cred + deb).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt=n=>n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const elF=document.getElementById('saldofinal'), elI=document.getElementById('saldoini');
+  if(saldoAncora==='inicial'){                 // usuário informou o inicial -> calcula o final
+    const si=parseValor(elI.value);
+    elF.value = isNaN(si) ? '' : fmt(si + cred - deb);
+  } else {                                     // usuário informou o final -> calcula o inicial
+    const sf=parseValor(elF.value);
+    elI.value = isNaN(sf) ? '' : fmt(sf - cred + deb);
+  }
 }
-document.getElementById('saldofinal').addEventListener('input',recalc);
+document.getElementById('saldofinal').addEventListener('input',()=>{saldoAncora='final';recalc();});
+document.getElementById('saldoini').addEventListener('input',()=>{saldoAncora='inicial';recalc();});
 
 // ---------- validação + geração ----------
 function valida(){
@@ -296,7 +305,9 @@ function valida(){
   if(!document.getElementById('conta').value.trim())  errs.push('Informe a conta.');
   if(!document.getElementById('dtini').value) errs.push('Informe a data inicial do período.');
   if(!document.getElementById('dtfim').value) errs.push('Informe a data final do período.');
-  if(isNaN(parseValor(document.getElementById('saldofinal').value))) errs.push('Informe o saldo final.');
+  if(isNaN(parseValor(document.getElementById('saldofinal').value)) &&
+     isNaN(parseValor(document.getElementById('saldoini').value)))
+    errs.push('Informe o saldo final ou o saldo inicial.');
   const l = coletaLancamentos();
   if(l.length===0) errs.push('Adicione ao menos um lançamento.');
   l.forEach((x,i)=>{
@@ -321,8 +332,13 @@ function gerarOFX(){
   const acctype= document.getElementById('acctype').value;
   const dtini  = document.getElementById('dtini').value;
   const dtfim  = document.getElementById('dtfim').value;
-  const saldoF = parseValor(document.getElementById('saldofinal').value);
   const l = coletaLancamentos();
+  let saldoF = parseValor(document.getElementById('saldofinal').value);
+  if(isNaN(saldoF)){                 // sem saldo final -> deriva do saldo inicial + movimento
+    let c=0,d=0; l.forEach(x=>{ if(!isNaN(x.valor)){ if(x.tipo==='C') c+=Math.abs(x.valor); else d+=Math.abs(x.valor); }});
+    const si=parseValor(document.getElementById('saldoini').value);
+    saldoF = isNaN(si) ? 0 : si + c - d;
+  }
   const now = new Date();
   const dtserver = `${now.getFullYear()}${pad(now.getMonth()+1,2)}${pad(now.getDate(),2)}${pad(now.getHours(),2)}${pad(now.getMinutes(),2)}${pad(now.getSeconds(),2)}`;
 
@@ -638,6 +654,7 @@ async function importarPDF(file){
       const d=tr.querySelector('.f-data').value, h=tr.querySelector('.f-hist').value, v=tr.querySelector('.f-valor').value;
       if(!d && !h && !v) tr.remove();
     });
+    saldoAncora = H.saldofinal ? 'final' : 'inicial';
     r.recs.forEach(addRow);
     recalc();
     if(r.recs.length===0){ msgPdf(`Detectei "${NOMES_TIPO[r.tipo]}" mas não encontrei lançamentos. Confira o PDF.`); return; }
