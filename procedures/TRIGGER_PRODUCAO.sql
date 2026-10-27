@@ -8,10 +8,12 @@
  * NATIVA do Tasy nao le corretamente. Assim, qualquer conta nova desses
  * bancos passa a importar sozinha, sem mexer no codigo.
  *
- *   cd_banco:  1 = Banco do Brasil | 4 = Banco do Nordeste | 237 = Bradesco
+ *   cd_banco: 1=Banco do Brasil | 4=Banco do Nordeste | 104=Caixa |
+ *             136=Unicred | 237=Bradesco | 748=Sicredi
+ *   (999 = Fundo Fixo e caixa interno, nao tem OFX -> fica de fora)
  *
- * Para incluir outro banco (ex.: 104 = Caixa), basta adicionar o codigo
- * na linha  IF v_cd_banco IN (1, 4, 237) THEN
+ * Para incluir um banco novo, basta adicionar o codigo na linha
+ *   IF v_cd_banco IN (...) THEN
  *
  * Seguranca: a procedure apaga o staging (w_interf_concil) ao final, entao
  * a rotina nativa nao chega a reprocessar essas contas -> nao duplica.
@@ -39,8 +41,8 @@ BEGIN
             WHEN OTHERS THEN v_cd_banco := NULL;
         END;
 
-        -- Bancos cujo OFX usa a importacao customizada
-        IF v_cd_banco IN (1, 4, 237) THEN
+        -- Bancos cujo OFX usa a importacao customizada (todos os bancos reais da base)
+        IF v_cd_banco IN (1, 4, 104, 136, 237, 748) THEN
             BEGIN
                 -- Ultimo extrato criado hoje e ainda nao processado
                 SELECT MAX(nr_sequencia)
