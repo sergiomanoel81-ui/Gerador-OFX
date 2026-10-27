@@ -1,12 +1,20 @@
 /*******************************************************************************
  * TRIGGER: TRG_AUTO_IMPORT_OFX_BRADESCO
- * Detecta fim do upload OFX e chama procedure automaticamente
- * Autor: Sérgio Cerqueira - CSB
- * Data: 17/12/2025
- * 
- * CONFIGURAÇÃO: Para adicionar mais contas, edite a linha:
- *   IF :NEW.nr_seq_conta IN (32) THEN
- * Exemplo: IF :NEW.nr_seq_conta IN (32, 10, 13) THEN
+ * Detecta o fim do upload do OFX (</OFX>) e chama a procedure de importacao.
+ * Autor: Sergio Cerqueira - CSB
+ *
+ * Em vez de uma lista fixa de contas, filtra pelo BANCO da conta
+ * (via banco_estabelecimento): processa os bancos cujo OFX a rotina
+ * NATIVA do Tasy nao le corretamente. Assim, qualquer conta nova desses
+ * bancos passa a importar sozinha, sem mexer no codigo.
+ *
+ *   cd_banco:  1 = Banco do Brasil | 4 = Banco do Nordeste | 237 = Bradesco
+ *
+ * Para incluir outro banco (ex.: 104 = Caixa), basta adicionar o codigo
+ * na linha  IF v_cd_banco IN (1, 4, 237) THEN
+ *
+ * Seguranca: a procedure apaga o staging (w_interf_concil) ao final, entao
+ * a rotina nativa nao chega a reprocessar essas contas -> nao duplica.
  ******************************************************************************/
 
 CREATE OR REPLACE TRIGGER TRG_AUTO_IMPORT_OFX_BRADESCO
@@ -14,40 +22,45 @@ AFTER INSERT ON W_INTERF_CONCIL
 FOR EACH ROW
 DECLARE
     PRAGMA AUTONOMOUS_TRANSACTION;
-    v_nr_extrato NUMBER;
+    v_nr_extrato     NUMBER;
+    v_cd_banco       NUMBER;
     v_saldo_anterior NUMBER;
-    v_saldo_final NUMBER;
+    v_saldo_final    NUMBER;
 BEGIN
-    -- Contas configuradas para importação OFX Bradesco
-    -- Conta 32 = Bradesco - 888 5 - Conta Aplicação INVEST FACIL
-    IF :NEW.nr_seq_conta IN (32) THEN
-        
-        -- Detectar fim do arquivo OFX
-        IF UPPER(:NEW.ds_conteudo) LIKE '%</OFX>%' THEN
-            
+    -- Dispara apenas quando o upload do OFX termina
+    IF UPPER(:NEW.ds_conteudo) LIKE '%</OFX>%' THEN
+
+        -- Descobre o banco da conta (tabela que ja existe no Tasy)
+        BEGIN
+            SELECT cd_banco INTO v_cd_banco
+            FROM   banco_estabelecimento
+            WHERE  nr_sequencia = :NEW.nr_seq_conta;
+        EXCEPTION
+            WHEN OTHERS THEN v_cd_banco := NULL;
+        END;
+
+        -- Bancos cujo OFX usa a importacao customizada
+        IF v_cd_banco IN (1, 4, 237) THEN
             BEGIN
-                -- Buscar último extrato criado hoje (não processado)
+                -- Ultimo extrato criado hoje e ainda nao processado
                 SELECT MAX(nr_sequencia)
-                INTO v_nr_extrato
-                FROM banco_extrato
-                WHERE nr_seq_conta = :NEW.nr_seq_conta
-                AND dt_atualizacao >= TRUNC(SYSDATE)
-                AND vl_saldo_final IS NULL;
-                
+                INTO   v_nr_extrato
+                FROM   banco_extrato
+                WHERE  nr_seq_conta = :NEW.nr_seq_conta
+                  AND  dt_atualizacao >= TRUNC(SYSDATE)
+                  AND  vl_saldo_final IS NULL;
+
                 IF v_nr_extrato IS NOT NULL THEN
-                    -- Chamar procedure de importação
                     IMPORTA_EXTRATO_OFX_BRADESCO(
-                        nr_seq_extrato_p => v_nr_extrato,
+                        nr_seq_extrato_p    => v_nr_extrato,
                         cd_saldo_anterior_p => v_saldo_anterior,
-                        cd_saldo_final_p => v_saldo_final
+                        cd_saldo_final_p    => v_saldo_final
                     );
-                    
                     COMMIT;
                 END IF;
-                
             EXCEPTION
                 WHEN OTHERS THEN
-                    NULL; -- Não propagar erro
+                    NULL; -- nao propagar erro para nao travar o upload
             END;
         END IF;
     END IF;
