@@ -75,6 +75,12 @@
   .cols-demo{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
   .hcell{font-size:12px;font-weight:700;color:#fff;padding:8px 15px;border-radius:8px}
   .hcell.oblig{background:var(--accent)} .hcell.opc{background:#8a94a6}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:0 0 16px;flex-wrap:wrap}
+  .tab{border:none;background:transparent;padding:10px 16px;font:inherit;font-weight:700;color:var(--muted);
+    cursor:pointer;border-bottom:2px solid transparent;border-radius:8px 8px 0 0;}
+  .tab:hover{color:var(--ink);background:#f6f8fa}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .tabpanel[hidden]{display:none}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -82,12 +88,70 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="logo">OFX</div>
+    <div class="logo">CB</div>
     <div>
-      <h1>Gerador de OFX</h1>
-      <p>Cria arquivo OFX para importar no Tasy — contas sem exportação (ex.: aplicação Bradesco)</p>
+      <h1>Conversor de Extratos</h1>
+      <p>Lê <b>OFX</b>, <b>PDF</b> ou <b>Excel</b> do banco e gera: arquivo <b>OFX</b> ou planilha no layout <b>“Importar extrato Excel”</b> do Tasy.</p>
     </div>
   </header>
+
+  <div class="card">
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="ofx"   onclick="showTab('ofx')">📘 Importar OFX</button>
+      <button class="tab"        data-tab="excel" onclick="showTab('excel')">📄 Importar Excel</button>
+      <button class="tab"        data-tab="pdf"   onclick="showTab('pdf')">📕 Importar PDF</button>
+    </div>
+
+    <div class="tabpanel" id="panel-ofx">
+      <p class="hint" style="margin-top:0">Leia um arquivo <b>.ofx</b> do banco e a ferramenta preenche conta, período, saldo e os lançamentos.
+        Entende tags fechadas e abertas, valores com vírgula ou ponto, e define C/D por <code>TRNTYPE</code>/sinal.</p>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="document.getElementById('ofxfile').click()">📘 Escolher arquivo OFX</button>
+        <input type="file" id="ofxfile" accept=".ofx,.txt,application/x-ofx" hidden>
+      </div>
+      <div class="err" id="msgOfx"></div>
+    </div>
+
+    <div class="tabpanel" id="panel-excel" hidden>
+      <p class="hint" style="margin-top:0">Monte uma planilha simples com as colunas abaixo (aceita <b>.xls</b> e <b>.xlsx</b>).
+        Baixe o modelo pronto para não errar os títulos. Os lançamentos importados entram na tabela abaixo.</p>
+      <div class="legend">
+        <span class="chip oblig">Obrigatório</span>
+        <span class="chip opc">Opcional</span>
+      </div>
+      <div class="cols-demo">
+        <span class="hcell oblig">Data</span>
+        <span class="hcell oblig">Histórico</span>
+        <span class="hcell opc">Documento</span>
+        <span class="hcell oblig">Tipo (C/D)</span>
+        <span class="hcell oblig">Valor</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" onclick="baixarModelo()">⬇ Baixar modelo Excel</button>
+        <button class="btn btn-primary" onclick="document.getElementById('xlsfile').click()">📄 Escolher planilha</button>
+        <input type="file" id="xlsfile" accept=".xls,.xlsx" hidden>
+      </div>
+      <div class="err" id="msgExcel"></div>
+    </div>
+
+    <div class="tabpanel" id="panel-pdf" hidden>
+      <p class="hint" style="margin-top:0">Leia o PDF do extrato e a ferramenta preenche conta, período, saldo e os lançamentos.
+        Reconhece: <b>BB Fundos/Aplicação</b>, <b>BB Rende Fácil</b> e <b>Bradesco Unificado (conta-corrente)</b>.
+        <b>Sempre confira os lançamentos</b> (principalmente o tipo C/D) antes de gerar.</p>
+      <p class="hint" style="margin-top:8px"><b>Como o tipo (C/D) é definido:</b><br>
+        • <b>Aplicação de fundo (BB Fundos / Rende Fácil):</b> convenção “conta da aplicação” —
+        <b>Aplicação e Rendimento = Crédito (C)</b>; <b>Resgate = Débito (D)</b>.<br>
+        • <b>Bradesco conta-corrente:</b> pelo histórico —
+        Resgate, Rentabilidade, Pix recebido e Pagamento = <b>Crédito</b>; TED e Aplicação = <b>Débito</b>.<br>
+        Confira a coluna <b>Tipo</b> e o <b>saldo inicial calculado</b> (deve bater com o saldo inicial do extrato).
+        Se a direção precisar ser o contrário no seu controle, é só trocar o C/D na linha antes de gerar.</p>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="document.getElementById('pdffile').click()">📕 Escolher PDF</button>
+        <input type="file" id="pdffile" accept=".pdf,application/pdf" hidden>
+      </div>
+      <div class="err" id="msgPdf"></div>
+    </div>
+  </div>
 
   <div class="card">
     <h2>Dados da conta</h2>
@@ -127,48 +191,6 @@
   </div>
 
   <div class="card">
-    <h2>Importar de Excel</h2>
-    <p class="hint" style="margin-top:0">Monte uma planilha simples com as colunas abaixo (aceita <b>.xls</b> e <b>.xlsx</b>).
-      Baixe o modelo pronto para não errar os títulos. Os lançamentos importados entram na tabela abaixo.</p>
-    <div class="legend">
-      <span class="chip oblig">Obrigatório</span>
-      <span class="chip opc">Opcional</span>
-    </div>
-    <div class="cols-demo">
-      <span class="hcell oblig">Data</span>
-      <span class="hcell oblig">Histórico</span>
-      <span class="hcell opc">Documento</span>
-      <span class="hcell oblig">Tipo (C/D)</span>
-      <span class="hcell oblig">Valor</span>
-    </div>
-    <div class="actions">
-      <button class="btn btn-ghost" onclick="baixarModelo()">⬇ Baixar modelo Excel</button>
-      <button class="btn btn-add" onclick="document.getElementById('xlsfile').click()">📄 Importar Excel</button>
-      <input type="file" id="xlsfile" accept=".xls,.xlsx" hidden>
-    </div>
-    <div class="err" id="msgExcel"></div>
-  </div>
-
-  <div class="card">
-    <h2>Importar de PDF (extrato do banco)</h2>
-    <p class="hint" style="margin-top:0">Leia o PDF do extrato e a ferramenta preenche conta, período, saldo e os lançamentos.
-      Reconhece: <b>BB Fundos/Aplicação</b>, <b>BB Rende Fácil</b> e <b>Bradesco Unificado (conta-corrente)</b>.
-      <b>Sempre confira os lançamentos</b> (principalmente o tipo C/D) antes de gerar.</p>
-    <p class="hint" style="margin-top:8px"><b>Como o tipo (C/D) é definido:</b><br>
-      • <b>Aplicação de fundo (BB Fundos / Rende Fácil):</b> convenção “conta da aplicação” —
-      <b>Aplicação e Rendimento = Crédito (C)</b>; <b>Resgate = Débito (D)</b>.<br>
-      • <b>Bradesco conta-corrente:</b> pelo histórico —
-      Resgate, Rentabilidade, Pix recebido e Pagamento = <b>Crédito</b>; TED e Aplicação = <b>Débito</b>.<br>
-      Confira a coluna <b>Tipo</b> e o <b>saldo inicial calculado</b> (deve bater com o saldo inicial do extrato).
-      Se a direção precisar ser o contrário no seu controle, é só trocar o C/D na linha antes de gerar.</p>
-    <div class="actions">
-      <button class="btn btn-add" onclick="document.getElementById('pdffile').click()">📕 Importar PDF</button>
-      <input type="file" id="pdffile" accept=".pdf,application/pdf" hidden>
-    </div>
-    <div class="err" id="msgPdf"></div>
-  </div>
-
-  <div class="card">
     <h2>Lançamentos</h2>
     <div style="overflow-x:auto">
       <table>
@@ -195,10 +217,18 @@
     </div>
   </div>
 
-  <div class="actions">
-    <button class="btn btn-primary" onclick="baixar()">⬇ Gerar e baixar OFX</button>
-    <button class="btn btn-ghost" onclick="previa()">Ver prévia</button>
-    <span class="spacer"></span>
+  <div class="card">
+    <h2>Gerar arquivo</h2>
+    <div class="actions">
+      <button class="btn btn-primary" onclick="gerarPlanilhaTasyXLS()">⬇ Planilha p/ Tasy (.xls)</button>
+      <button class="btn btn-ghost" onclick="gerarPlanilhaTasyCSV()">⬇ .csv</button>
+      <span style="width:1px;height:28px;background:var(--line);margin:0 6px"></span>
+      <button class="btn btn-ghost" onclick="baixar()">⬇ Gerar OFX</button>
+      <button class="btn btn-ghost" onclick="previa()">Prévia OFX</button>
+      <span class="spacer"></span>
+    </div>
+    <p class="hint">Com o upload de <b>.ofx</b> bloqueado no Tasy, use a <b>planilha</b> e importe por <b>extrato → botão direito → Importar extrato Excel</b>.
+      Para a planilha, só os <b>lançamentos</b> importam (data, tipo C/D e valor) — não precisa preencher banco/conta/saldo.</p>
   </div>
   <div class="err" id="msg"></div>
 
@@ -667,6 +697,191 @@ document.getElementById('pdffile').addEventListener('change', e=>{
 });
 if(window.pdfjsLib){ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }
 else{ msgPdf('Sem internet: o import de PDF só funciona online (biblioteca baixada na 1ª vez). O resto funciona normal.'); }
+
+// ---------- OFX: importar ----------
+function msgOfx(t, ok){ const m=document.getElementById('msgOfx'); m.className='err'+(ok?' ok':''); m.textContent=t; }
+function decodeBytes(buf){
+  const bytes=new Uint8Array(buf);
+  try{ return new TextDecoder('windows-1252').decode(bytes); }
+  catch(e){ return new TextDecoder('utf-8').decode(bytes); }
+}
+function tagVal(txt, tag){
+  // pega o conteudo da tag parando no proximo '<' (serve p/ tag aberta ou fechada)
+  const m = txt.match(new RegExp('<'+tag+'>([^<]*)','i'));
+  return m ? m[1].replace(/[\r\n]+/g,' ').trim() : '';
+}
+function isoFromOFX(d){
+  const s=String(d).replace(/\D/g,'').slice(0,8);
+  return s.length===8 ? `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}` : '';
+}
+function parseOFXText(txt){
+  const H={banco:'',acctype:'',agencia:'',conta:'',dtini:'',dtfim:'',saldofinal:''};
+  const recs=[];
+  if(!/<OFX>/i.test(txt)) return {ok:false,header:H,recs};
+  // cabecalho da conta
+  H.banco   = tagVal(txt,'BANKID').replace(/\D/g,'').padStart(3,'0').slice(-3);
+  H.conta   = tagVal(txt,'ACCTID');
+  const at   = tagVal(txt,'ACCTTYPE').toUpperCase();
+  if(['CHECKING','SAVINGS','MONEYMRKT'].includes(at)) H.acctype=at;
+  const ds=tagVal(txt,'DTSTART'), de=tagVal(txt,'DTEND');
+  if(ds) H.dtini=isoFromOFX(ds);
+  if(de) H.dtfim=isoFromOFX(de);
+  // saldo final: BALAMT dentro de LEDGERBAL
+  const led=txt.match(/<LEDGERBAL>([\s\S]*?)(<\/LEDGERBAL>|<MKTGINFO>|<\/STMTRS>)/i);
+  if(led){ const b=tagVal(led[1],'BALAMT'); if(b){ const n=parseValor(b); if(!isNaN(n)) H.saldofinal=n.toFixed(2).replace('.',','); } }
+  // transacoes
+  const re=/<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi; let m;
+  while((m=re.exec(txt))){
+    const b=m[1];
+    const trntype=tagVal(b,'TRNTYPE').toUpperCase();
+    const dt=tagVal(b,'DTPOSTED');
+    const amt=tagVal(b,'TRNAMT');
+    const chk=tagVal(b,'CHECKNUM');
+    const fit=tagVal(b,'FITID');
+    const memo=tagVal(b,'MEMO');
+    if(!dt || !amt) continue;
+    const vn=parseValor(amt);
+    if(isNaN(vn)) continue;
+    let tipo;
+    if(/CREDIT|DEP|INT|DIV/.test(trntype)) tipo='C';
+    else if(/DEBIT|FEE|SRVCHG|ATM|PAYMENT|XFER|CHECK/.test(trntype)) tipo='D';
+    else tipo = vn<0 ? 'D' : 'C';
+    recs.push({
+      data: isoFromOFX(dt),
+      hist: (memo||'LANCAMENTO').trim(),
+      doc:  (chk||fit||'').trim(),
+      tipo: tipo,
+      valor: Math.abs(vn).toFixed(2).replace('.',',')
+    });
+  }
+  return {ok:true,header:H,recs};
+}
+function limpaLinhasVazias(){
+  document.querySelectorAll('#rows tr').forEach(tr=>{
+    const d=tr.querySelector('.f-data').value, h=tr.querySelector('.f-hist').value, v=tr.querySelector('.f-valor').value;
+    if(!d && !h && !v) tr.remove();
+  });
+}
+function importarOFX(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const txt=decodeBytes(e.target.result);
+      const r=parseOFXText(txt);
+      if(!r.ok){ msgOfx('Arquivo não parece um OFX (não encontrei a tag <OFX>).'); return; }
+      const H=r.header;
+      if(H.banco){ const sel=document.getElementById('bankid'); if([...sel.options].some(o=>o.value===H.banco)) sel.value=H.banco; }
+      if(H.agencia) document.getElementById('agencia').value=H.agencia;
+      if(H.conta)   document.getElementById('conta').value=H.conta;
+      if(H.acctype) document.getElementById('acctype').value=H.acctype;
+      if(H.dtini)   document.getElementById('dtini').value=H.dtini;
+      if(H.dtfim)   document.getElementById('dtfim').value=H.dtfim;
+      if(H.saldofinal){ document.getElementById('saldofinal').value=H.saldofinal; saldoAncora='final'; }
+      limpaLinhasVazias();
+      r.recs.forEach(addRow);
+      recalc();
+      if(r.recs.length===0){ msgOfx('OFX lido, mas não encontrei lançamentos (<STMTTRN>). Confira o arquivo.'); return; }
+      msgOfx(`✓ OFX lido: ${r.recs.length} lançamento(s). Confira o tipo (C/D) antes de gerar.`, true);
+    }catch(err){ msgOfx('Erro ao ler o OFX: '+err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+document.getElementById('ofxfile').addEventListener('change', e=>{
+  if(e.target.files[0]) importarOFX(e.target.files[0]);
+  e.target.value='';
+});
+
+// ---------- Planilha no layout "Importar extrato Excel" do Tasy ----------
+const TASY_COLS=['BANK_ORIGIN_CODE','BRANCH_ORIGIN_CODE','ACCOUNT_ORIGIN_CODE','CATEGORY_CODE',
+  'HISTORY_CODE','HISTORY_DESCRIPTION','MOVEMENT_DATE','IE_DEBIT_CREDIT','IE_NATURE',
+  'DOCUMENT_NUMBER','POSTING_VALUE'];
+function msgTasy(t, ok){ const m=document.getElementById('msg'); m.className='err'+(ok?' ok':''); m.textContent=t; }
+function excelSerial(iso){
+  const p=iso.split('-').map(Number);
+  return Math.round((Date.UTC(p[0],p[1]-1,p[2]) - Date.UTC(1899,11,30)) / 86400000);
+}
+function validaLinhas(){
+  const l=coletaLancamentos(); const errs=[];
+  if(l.length===0){ errs.push('Adicione ou importe ao menos um lançamento.'); return errs; }
+  l.forEach((x,i)=>{
+    if(!x.data) errs.push(`Lançamento ${i+1}: data em branco (MOVEMENT_DATE é obrigatório).`);
+    if(x.tipo!=='C' && x.tipo!=='D') errs.push(`Lançamento ${i+1}: tipo inválido (use C ou D).`);
+    if(isNaN(x.valor) || x.valor===0) errs.push(`Lançamento ${i+1}: valor inválido (POSTING_VALUE é obrigatório).`);
+  });
+  return errs;
+}
+function linhasTasy(){
+  return coletaLancamentos().map(x=>({
+    hist:(x.hist||'').trim(), data:x.data, tipo:x.tipo, doc:(x.doc||'').trim(), valor:Math.abs(x.valor)
+  }));
+}
+function construirWBTasy(dados){
+  const ws={};
+  TASY_COLS.forEach((h,c)=>{ ws[XLSX.utils.encode_cell({r:0,c})]={v:h,t:'s'}; });
+  dados.forEach((x,ri)=>{
+    const r=ri+1;
+    ws[XLSX.utils.encode_cell({r,c:5})]={v:x.hist,t:'s'};                       // HISTORY_DESCRIPTION
+    ws[XLSX.utils.encode_cell({r,c:6})]={v:excelSerial(x.data),t:'n',z:'dd/mm/yyyy'}; // MOVEMENT_DATE
+    ws[XLSX.utils.encode_cell({r,c:7})]={v:x.tipo,t:'s'};                       // IE_DEBIT_CREDIT
+    ws[XLSX.utils.encode_cell({r,c:8})]={v:'D',t:'s'};                          // IE_NATURE (Disponivel)
+    if(x.doc){
+      const num=/^\d{1,15}$/.test(x.doc);
+      ws[XLSX.utils.encode_cell({r,c:9})]= num?{v:Number(x.doc),t:'n'}:{v:x.doc,t:'s'}; // DOCUMENT_NUMBER
+    }
+    ws[XLSX.utils.encode_cell({r,c:10})]={v:Math.round(x.valor*100)/100,t:'n',z:'0.00'}; // POSTING_VALUE
+  });
+  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:dados.length,c:TASY_COLS.length-1}});
+  ws['!cols']=[{wch:16},{wch:18},{wch:18},{wch:13},{wch:12},{wch:30},{wch:14},{wch:14},{wch:10},{wch:16},{wch:14}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
+  return wb;
+}
+function nomeTasy(ext){
+  const dtfim=document.getElementById('dtfim').value;
+  const c=(document.getElementById('conta').value||'').replace(/\D/g,'')||'extrato';
+  const mm=dtfim?dtfim.slice(5,7):'00', yy=dtfim?dtfim.slice(0,4):'0000';
+  return `Extrato_Tasy_${c}_${mm}_${yy}.${ext}`;
+}
+function dl(blob,name){
+  const u=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
+}
+function gerarPlanilhaTasyXLS(){
+  if(!window.XLSX){ msgTasy('A biblioteca de Excel não carregou. Conecte-se à internet e recarregue (F5).'); return; }
+  const errs=validaLinhas(); if(errs.length){ msgTasy(errs[0]); return; }
+  const wb=construirWBTasy(linhasTasy());
+  try{
+    XLSX.writeFile(wb, nomeTasy('xls'), {bookType:'biff8'});
+    msgTasy('✓ Planilha .xls gerada no layout do Tasy. Importe por: extrato → botão direito → Importar extrato Excel.', true);
+  }catch(e){
+    try{ XLSX.writeFile(wb, nomeTasy('xlsx'));
+      msgTasy('✓ Gerada em .xlsx (o navegador não produziu .xls). Se o Tasy recusar, use o botão .csv.', true);
+    }catch(e2){ msgTasy('Erro ao gerar a planilha: '+e2.message); }
+  }
+}
+function gerarPlanilhaTasyCSV(){
+  const errs=validaLinhas(); if(errs.length){ msgTasy(errs[0]); return; }
+  const dados=linhasTasy();
+  const esc=s=>{ s=String(s==null?'':s); return /[;"\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const brDate=iso=>{ const p=iso.split('-'); return `${p[2]}/${p[1]}/${p[0]}`; };
+  const lines=[TASY_COLS.join(';')];
+  dados.forEach(x=>{
+    lines.push(['','','','','',esc(x.hist),brDate(x.data),x.tipo,'D',esc(x.doc),
+      x.valor.toFixed(2).replace('.',',')].join(';'));
+  });
+  const csv='﻿'+lines.join('\r\n');
+  dl(new Blob([csv],{type:'text/csv;charset=utf-8'}), nomeTasy('csv'));
+  msgTasy('✓ CSV gerado (separador ponto-e-vírgula). Importe por Importar extrato Excel.', true);
+}
+
+// ---------- abas de importação ----------
+function showTab(name){
+  ['ofx','excel','pdf'].forEach(n=>{
+    const p=document.getElementById('panel-'+n);
+    if(p) p.hidden = (n!==name);
+  });
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+}
 
 // início
 addRow();
